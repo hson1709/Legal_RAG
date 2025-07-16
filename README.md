@@ -44,6 +44,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### 4. Create file .env
+Add OPENAI_API_KEY = YOUR API KEY
+
 ## Running the Application
 
 ### 1. Start the Streamlit Application
