@@ -1,0 +1,2 @@
+vector_db_512/** filter=lfs diff=lfs merge=lfs -text
+vector_db_1024/** filter=lfs diff=lfs merge=lfs -text
