@@ -1,2 +1,5 @@
 venv/
 .env
+vector_db_512/
+vector_db_1024/
+model/
