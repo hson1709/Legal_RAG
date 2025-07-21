@@ -2,13 +2,18 @@
 
 A chatbot built with RAG (Retrieval-Augmented Generation), designed to provide accurate legal advice based on Vietnamese law documents. The application uses advanced embedding models and vector databases to retrieve relevant legal information and generate contextual responses.
 
-## Features
+##  Features
 
-- **RAG-based Question Answering**: Utilizes retrieval-augmented generation for accurate legal responses
-- **Interactive Web Interface**: Built with Streamlit for easy user interaction
-- **Conversation History**: Maintains chat history throughout the session
-- **Source Citations**: Provides references to legal documents used in responses
-- **Vietnamese Law Focus**: Specialized in Vietnamese legal system and regulations
+- ** Multi-Intent Handling**
+  - **Lookup**: Retrieve legal information for a given topic or keyword
+  - **Comparison**: Compare legal regulations across documents, time periods, or topics
+  - **Analysis**: Summarize, break down, and reason about legal situations
+- ** RAG-based Question Answering**: Combines vector retrieval with generative answers
+- **Streamlit Web Interface**: Easy-to-use chat-based frontend
+- **Source Citations**: Display exact documents and article numbers used in answers
+- **Conversation History**: Maintains chat history during session
+- **Vietnamese Law Focus**: Expertly tuned for the Vietnamese legal system
+- **Model Selection**: Choose between multiple LLM providers (e.g., OpenAI, Gemini)
 
 ## Prerequisites
 
@@ -44,8 +49,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Create file .env
-Add OPENAI_API_KEY = YOUR API KEY
+### 4. Add API Key Configuration
+Create a .env file with your LLM credentials:
+
+```bash
+OPENAI_API_KEY=your-openai-key
+GEMINI_API_KEY=your-gemini-key
+```
 
 ## Running the Application
 
@@ -65,10 +75,11 @@ http://localhost:8501
 ### 3. Using the Chatbot
 
 1. **Enter your legal question** in the input field
-2. **Select chunk size** (512 or 1024 tokens) from the sidebar
-3. **Click "Send"** to get your answer
-4. **View source references** by expanding the reference section
-5. **Clear chat history** using the sidebar button if needed
+2. **Select model** (GPT or Gemini) from the sidebar
+3. **Select chunk size** (512 or 1024 tokens) from the sidebar
+4. **Click "Send"** to get your answer
+5. **View source references** by expanding the reference section
+6. **Clear chat history** using the sidebar button if needed
 
 ## Configuration
 
