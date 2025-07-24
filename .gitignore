@@ -1,5 +1,6 @@
 venv/
 .env
 model/
+vector_stores/
 __pycache__/
 *.pyc

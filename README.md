@@ -4,11 +4,17 @@ A chatbot built with RAG (Retrieval-Augmented Generation), designed to provide a
 
 ##  Features
 
-- ** Multi-Intent Handling**
+- **Multi-Intent Handling**
   - **Lookup**: Retrieve legal information for a given topic or keyword
   - **Comparison**: Compare legal regulations across documents, time periods, or topics
   - **Analysis**: Summarize, break down, and reason about legal situations
-- ** RAG-based Question Answering**: Combines vector retrieval with generative answers
+- **Hybrid Search** (Vector + Keyword)
+  - Combines semantic search (via vector embeddings) with lexical search (BM25-based keyword retriever)
+  - Allows adjustable weights between vector and keyword scores for optimal performance across use cases
+- **Reranker for accuracy improvement**
+  - A CrossEncoder reranker re-scores retrieved documents for relevance to the query
+  - Improves final document ranking before generating answers
+- **RAG-based Question Answering**: Combines vector retrieval with generative answers
 - **Streamlit Web Interface**: Easy-to-use chat-based frontend
 - **Source Citations**: Display exact documents and article numbers used in answers
 - **Conversation History**: Maintains chat history during session
@@ -77,9 +83,11 @@ http://localhost:8501
 1. **Enter your legal question** in the input field
 2. **Select model** (GPT or Gemini) from the sidebar
 3. **Select chunk size** (512 or 1024 tokens) from the sidebar
-4. **Click "Send"** to get your answer
-5. **View source references** by expanding the reference section
-6. **Clear chat history** using the sidebar button if needed
+4. **Enter chunk dosc** for retriver from the sidebar
+5. **Adjust hybrid search weight** between vector and keyword retrievers
+6. **Click "Send"** to get your answer
+7. **View source references** by expanding the reference section
+8. **Clear chat history** using the sidebar button if needed
 
 ## Configuration
 
@@ -87,11 +95,3 @@ http://localhost:8501
 
 - **512 tokens**: More precise retrieval, suitable for focused and specific legal queries
 - **1024 tokens**: More comprehensive context, better for complex legal questions
-
-### Model Configuration
-
-The application uses the following components:
-- **Embedding Model**: For document and query vectorization
-- **Vector Database**: ChromaDB for efficient similarity search
-- **Language Model**: For generating contextual responses
-- **Prompt Template**: Optimized for legal consultation scenarios

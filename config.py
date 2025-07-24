@@ -3,17 +3,22 @@ from dotenv import load_dotenv
 import torch 
 
 load_dotenv()
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-os.environ["HF_HOME"] = "D:/legal_rag_project/model"
 
+os.environ["HF_HOME"] = os.path.join(PROJECT_ROOT, "model")
+
+RAW_DATA_PATH = (PROJECT_ROOT, "data", "thuvienphapluat_documents.jsonl")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-PERSIST_DIRECTORY = "D:/legal_rag_project/vector_db"
+PERSIST_DIRECTORY = os.path.join(PROJECT_ROOT, "vector_db")
 EMBEDDING_MODEL = "AITeamVN/Vietnamese_Embedding"
+RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 GPT_MODEL = "gpt-4o"
 GEMINI_MODEL = "gemini-2.5-pro"
-PARENT_DOCUMENTS = "D:/legal_rag_project/data/parent_documents.pkl"
+PARENT_DOCUMENTS = os.path.join(PROJECT_ROOT, "data", "parent_documents.pkl")
 
 
-__all__ = ["OPENAI_API_KEY","GOOGLE_API_KEY", "PERSIST_DIRECTORY", "EMBEDDING_MODEL", "GPT_MODEL", "GEMINI_MODEL", "DEVICE"]
+
+__all__ = ["OPENAI_API_KEY","GOOGLE_API_KEY", "RAW_DATA_PATH", "PERSIST_DIRECTORY", "EMBEDDING_MODEL", "RERANKER_MODEL", "GPT_MODEL", "GEMINI_MODEL", "DEVICE", "PARENT_DOCUMENTS"]

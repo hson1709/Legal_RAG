@@ -1,10 +1,11 @@
 import streamlit as st
 from datetime import datetime
 
-from src.components.model_loader import load_embedding_model, load_llm
+from src.components.model_loader import load_embedding_model, load_llm, load_reranking_model
 from src.components.generator import Generator
-from src.components.retriever import Retriever
+from src.components.hybrid_retriever import HybridRetriever
 from src.components.intent_classifier import IntentClassifier
+from src.components.reranker import CrossEncoderReRanker
 from src.pipline import RAGPipeline
 
 # Cấu hình trang
@@ -90,6 +91,30 @@ st.markdown("""
         margin: 0.5rem 0;
         font-size: 0.85rem;
     }
+    .parameter-section {
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        border: 1px solid #dee2e6;
+    }
+    .status-indicator {
+        padding: 0.5rem;
+        border-radius: 5px;
+        margin: 0.5rem 0;
+        text-align: center;
+        font-weight: bold;
+    }
+    .status-loaded {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    .status-loading {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,26 +132,33 @@ def init_session_state():
 
 @st.cache_resource
 def load_pipelines_for_model(model_provider):
-    """Load pipelines for a specific model provider"""
+    """Load both 512 and 1024 pipelines for a model"""
     embedding_model = load_embedding_model()
     llm = load_llm(provider=model_provider)
+    generator = Generator()
+    classifier = IntentClassifier(llm=llm)
+    reranking_model = load_reranking_model()
+    reranker = CrossEncoderReRanker(reranking_model)
     
-    retriever_512 = Retriever(
+    # Create retriever for 512 chunks
+    retriever_512 = HybridRetriever(
         embedding_model=embedding_model,
         persist_directory="./vector_stores/bm_db_legal_512",
         chunk_size=512,
         chunk_overlap=50,
+        reranker=reranker
     )
-    retriever_1024 = Retriever(
+    
+    # Create retriever for 1024 chunks
+    retriever_1024 = HybridRetriever(
         embedding_model=embedding_model,
         persist_directory="./vector_stores/bm_db_legal_1024",
         chunk_size=1024,
         chunk_overlap=100,
+        reranker=reranker
     )
     
-    generator = Generator()
-    classifier = IntentClassifier(llm=llm)
-    
+    # Create pipelines
     pipeline_512 = RAGPipeline(retriever_512, generator, classifier, llm)
     pipeline_1024 = RAGPipeline(retriever_1024, generator, classifier, llm)
     
@@ -166,6 +198,14 @@ def display_message(role, content, context=None, timestamp=None, model_info=None
         </div>
         """, unsafe_allow_html=True)
 
+def update_retriever_params(retriever, vector_num_chunks, keyword_num_chunks, hybrid_num_chunks, num_final_docs, vector_search_weight):
+    """Update retriever parameters without reloading"""
+    retriever.vector_retriever.num_chunks = vector_num_chunks
+    retriever.keyword_retriever.num_chunks = keyword_num_chunks
+    retriever.hybrid_num_chunks = hybrid_num_chunks
+    retriever.num_final_docs = num_final_docs
+    retriever.vector_search_weight = vector_search_weight
+
 def main():
     init_session_state()
 
@@ -175,7 +215,7 @@ def main():
         st.header("⚙️ Cấu hình")
         
         # Model Selection
-        st.subheader("Chọn Model AI")
+        st.subheader("🤖 Chọn Model AI")
         model_provider = st.selectbox(
             "Mô hình:",
             ["google", "openai"],
@@ -183,7 +223,8 @@ def main():
             help="Chọn model AI để xử lý câu hỏi của bạn"
         )
         
-        # Chunk size selection
+        # Chunk Configuration
+        st.subheader("📄 Cấu hình Chunk")
         chunk_size = st.selectbox(
             "Kích thước chunk:",
             [512, 1024],
@@ -191,37 +232,70 @@ def main():
             help="Kích thước chunk ảnh hưởng đến độ chính xác và tốc độ xử lý"
         )
         
-        # Number of chunks
-        num_chunks = st.number_input(
-            "Số lượng tài liệu tham khảo (k):",
-            min_value=1,
-            max_value=20,
-            value=5,
-            step=1,
-            help="Số lượng tài liệu tham khảo sẽ được truy xuất để trả lời"
-        )
-        
-        st.markdown("---")
+        with st.container():
+            
+            st.markdown("**Vector Retriever:**")
+            vector_num_chunks = st.number_input(
+                "Số chunks vector retriever:",
+                min_value=1,
+                max_value=50,
+                value=10,
+                step=1,
+                help="Số lượng chunks được truy xuất bởi vector retriever"
+            )
+            
+            st.markdown("**Keyword Retriever:**")
+            keyword_num_chunks = st.number_input(
+                "Số chunks keyword retriever:",
+                min_value=1,
+                max_value=50,
+                value=10,
+                step=1,
+                help="Số lượng chunks được truy xuất bởi keyword retriever (BM25)"
+            )
+            
+            st.markdown("**Hybrid with Reranker Documents:**")
+            hybrid_num_chunks = st.number_input(
+                "Số chunks hybrid retriever:",
+                min_value=1,
+                max_value=20,
+                value=5,
+                step=1,
+                help="ố lượng chunks được truy xuất bởi hybrid retriever (dense + spare)"
+            )
 
-                # Clear chat history
+            st.markdown("**Final Documents Output:**")
+            num_final_docs = st.number_input(
+                "Số tài liệu cuối cùng:",
+                min_value=1,
+                max_value=20,
+                value=5,
+                step=1,
+                help="Số lượng tài liệu cuối cùng sau khi merge từ cả vector và keyword retriever"
+            )
+
+            st.markdown("**Vector Search Weight**")
+            vector_search_weight = st.number_input(
+                "Tỉ lệ tài liệu lấy từ vector retriever:",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.6,
+                step=0.1,
+                help="Số phần trăm tài liệu lấy từ vector retriever"
+            )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        
+
+        # Clear chat history
         if st.button("🗑️ Xóa lịch sử trò chuyện"):
             st.session_state.messages = []
             st.success("Đã xóa lịch sử!")
             st.rerun()
 
-        
-        # Instructions
-        st.info("""
-        **Hướng dẫn sử dụng:**
-        1. Chọn model AI phù hợp
-        2. Nhập câu hỏi pháp luật
-        3. Chọn kích thước chunk phù hợp
-        4. Chọn số lượng tài liệu tham khảo
-        5. Nhấn "Gửi" để nhận câu trả lời
-        """)
-        
 
-    # Load pipelines khi model thay đổi hoặc lần đầu load
+    # Load pipelines when model changes or first load
     if st.session_state.current_model != model_provider or not st.session_state.pipeline_loaded:
         with st.spinner(f"🔄 Đang tải model {get_model_info(model_provider)['name']}..."):
             try:
@@ -309,8 +383,18 @@ def main():
                     st.session_state.processing = False
                     st.stop()
                 
+                # Select pipeline based on chunk size
                 pipeline = current_pipelines["1024"] if chunk_size == 1024 else current_pipelines["512"]
-                pipeline.retriever.num_chunks = num_chunks
+                
+                # Update retriever parameters dynamically
+                update_retriever_params(
+                    pipeline.retriever, 
+                    vector_num_chunks, 
+                    keyword_num_chunks, 
+                    hybrid_num_chunks,
+                    num_final_docs,
+                    vector_search_weight
+                )
                 
                 with st.spinner(f"Đang tìm kiếm thông tin với {get_model_info(model_provider)['name']}..."):
                     answer = pipeline.run(last_message["content"])
@@ -321,7 +405,15 @@ def main():
                         "role": "assistant",
                         "content": answer,
                         "timestamp": answer_timestamp,
-                        "model": model_provider
+                        "model": model_provider,
+                        "params": {
+                            "chunk_size": chunk_size,
+                            "vector_chunks": vector_num_chunks,
+                            "keyword_chunks": keyword_num_chunks,
+                            "hybrid_chunks": hybrid_num_chunks,
+                            "final_docs" : num_final_docs,
+                            "vector_weight": vector_search_weight
+                        }
                     })
                 else:
                     st.error("Không thể tạo câu trả lời. Vui lòng thử lại!")
@@ -342,8 +434,14 @@ def main():
         st.markdown(
             f"""
             <div style="text-align: center; color: #666; font-size: 0.9rem; margin-top: 1rem;">
-                <p>🤖 Chatbot Tư vấn Pháp luật - Powered by RAG Technology</p>
-                <p>Đang sử dụng: <strong>{current_model_info['name']}</strong></p>
+                <p>🤖 Chatbot Tư vấn Pháp luật - Powered by Hybrid RAG Technology</p>
+                <p>Đang sử dụng: <strong>{current_model_info['name']}</strong> | 
+                Chunk: <strong>{chunk_size}</strong> | 
+                Vector: <strong>{vector_num_chunks}</strong> | 
+                Keyword: <strong>{keyword_num_chunks}</strong> | 
+                Hybrid: <strong>{hybrid_num_chunks}</strong> |
+                Final Docs <strong>{num_final_docs}</strong> |
+                Vector Weight <strong>{vector_search_weight}</strong></p>
                 <p><em>Lưu ý: Thông tin chỉ mang tính chất tham khảo, không thay thế tư vấn pháp lý chuyên nghiệp</em></p>
             </div>
             """,

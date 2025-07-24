@@ -1,7 +1,8 @@
 from langchain_community.chat_models import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
-from config import OPENAI_API_KEY, GOOGLE_API_KEY, EMBEDDING_MODEL, GPT_MODEL, GEMINI_MODEL, DEVICE
+from config import OPENAI_API_KEY, GOOGLE_API_KEY, EMBEDDING_MODEL, RERANKER_MODEL, GPT_MODEL, GEMINI_MODEL, DEVICE
 from langchain_huggingface import HuggingFaceEmbeddings
+from FlagEmbedding import FlagReranker
 
 
 def load_embedding_model():
@@ -13,6 +14,25 @@ def load_embedding_model():
     )
     
     return embedding_model
+
+def load_reranking_model():
+    device = DEVICE
+    
+    if device == "cpu":
+        reranker = FlagReranker(
+            RERANKER_MODEL,
+            max_length=1024,
+            use_fp16=False
+        )
+
+    else:
+        reranker = FlagReranker(
+            RERANKER_MODEL,
+            max_length=1024,
+            use_fp16=True
+        )
+
+    return reranker
 
 
 def load_llm(provider="google"):

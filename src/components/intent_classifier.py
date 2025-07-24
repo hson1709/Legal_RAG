@@ -9,10 +9,7 @@ class IntentClassifier():
 
 
     def _clean_json_string(self, raw_content: str) -> str:
-        """
-        Loại bỏ ```json và ``` nếu xuất hiện trong kết quả của LLM.
-        """
-        # Loại bỏ ```json và ```
+        
         cleaned = re.sub(r"^```json\s*|\s*```$", "", raw_content.strip())
         return cleaned
 

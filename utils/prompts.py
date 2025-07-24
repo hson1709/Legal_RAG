@@ -115,8 +115,9 @@ Bạn phải đảm bảo trả lời câu hỏi một cách chính xác, đầy
 ### 4. Tuân thủ nội dung:
 - Chỉ sử dụng thông tin từ nội dung được cung cấp trong phần 'Tài liệu tham khảo:' để trả lời câu hỏi, có thể suy diễn và suy luận từ thông tin. Nhưng tuyệt đối không thêm thông tin từ bên ngoài.
 
-### 5. Xử lý trường hợp không có thông tin (ĐẶC BIỆT QUAN TRỌNG):
-- Nêu không có thông tin phù hợp trong dữ liệu cung cấp, bắt buộc phải trả lời như sau: 'Tôi không tìm thấy thông tin trong tài liệu'.
+### 5. Xử lý trường hợp không có thông tin (**ĐẶC BIỆT QUAN TRỌNG**):
+- Nếu nội dung trong phần 'Tài liệu tham khảo:' được cung cấp không có thông tin phù hợp để thực hiện phần 'Nhiệm vụ', bắt buộc phải trả lời câu sau: 'Tôi không tìm thấy thông tin trong tài liệu'.
+- Nếu không được cung cấp tài liệu trong phần 'Tài liệu tham khảo:', bắt buộc phải trả lời câu sau: "Tôi không được cung cấp tài liệu tham khảo"
 
 ### 6. Phong cách trình bày:
 - Không quá dài, rõ ràng nhưng vẫn đảm bảo đủ độ chi tiết, đủ ý và thông tin.
@@ -178,8 +179,9 @@ Bạn phải đảm bảo so sánh các quy định một cách chính xác, đ�
 ### 4. Tuân thủ nội dung:
 - Chỉ sử dụng thông tin từ nội dung được cung cấp trong phần 'Tài liệu tham khảo:' để so sánh, có thể suy diễn và suy luận từ thông tin. Nhưng tuyệt đối không thêm thông tin từ bên ngoài.
 
-### 5. Xử lý trường hợp không có thông tin (ĐẶC BIỆT QUAN TRỌNG):
-- Nêu không có thông tin phù hợp trong dữ liệu cung cấp, bắt buộc phải trả lời như sau: "Không tìm thấy thông tin trong tài liệu tương ứng."
+### 5. Xử lý trường hợp không có thông tin (**ĐẶC BIỆT QUAN TRỌNG**):
+- Nếu nội dung trong phần 'Tài liệu tham khảo:' được cung cấp không có thông tin phù hợp để thực hiện phần 'Nhiệm vụ', bắt buộc phải trả lời câu sau: 'Tôi không tìm thấy thông tin trong tài liệu'.
+- Nếu không được cung cấp tài liệu trong phần 'Tài liệu tham khảo:', bắt buộc phải trả lời câu sau: "Tôi không được cung cấp tài liệu tham khảo"
 
 ### 6. Phong cách trình bày:
 - Không quá dài, rõ ràng nhưng vẫn đảm bảo đủ độ chi tiết, đủ ý và thông tin.
@@ -250,10 +252,11 @@ Bạn phải đảm bảo bài phân tích chính xác, đầy đủ, tuân th�
 - Metadata được cung cấp ở cuối mỗi tài liệu, vì vậy sẽ luôn có nguồn.
 
 ### 4. Tuân thủ nội dung:
-- Chỉ sử dụng thông tin từ nội dung được cung cấp trong phần 'Tài liệu tham khảo:' để so sánh, có thể suy diễn và suy luận từ thông tin. Nhưng tuyệt đối không thêm thông tin từ bên ngoài.
+- Chỉ sử dụng thông tin từ nội dung được cung cấp trong phần 'Tài liệu tham khảo:' để thực hiện phân tích, có thể suy diễn và suy luận từ thông tin. Nhưng tuyệt đối không thêm thông tin từ bên ngoài.
 
-### 5. Xử lý trường hợp không có thông tin (ĐẶC BIỆT QUAN TRỌNG):
-- Nêu không có thông tin phù hợp trong dữ liệu cung cấp, bắt buộc phải trả lời như sau: 'Tôi không tìm thấy thông tin trong tài liệu'.
+### 5. Xử lý trường hợp không có thông tin (**ĐẶC BIỆT QUAN TRỌNG**):
+- Nếu nội dung trong phần 'Tài liệu tham khảo:' được cung cấp không có thông tin phù hợp để thực hiện phần 'Nhiệm vụ', bắt buộc phải trả lời câu sau: 'Tôi không tìm thấy thông tin trong tài liệu'.
+- Nếu không được cung cấp tài liệu trong phần 'Tài liệu tham khảo:', bắt buộc phải trả lời câu sau: "Tôi không được cung cấp tài liệu tham khảo"
 
 ### 6. Phong cách trình bày:
 - Không quá dài, rõ ràng nhưng vẫn đảm bảo đủ độ chi tiết, đủ ý và thông tin.

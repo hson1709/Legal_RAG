@@ -9,3 +9,6 @@ tqdm
 torch
 sentence-transformers
 streamlit
+underthesea
+rank-bm25
+FlagEmbedding

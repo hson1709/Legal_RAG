@@ -11,13 +11,14 @@ class Generator:
 
 
     def _set_basic_prompt_template(self):
-        """Original prompt template"""
+
         system_prompt = BASIC_PROMT
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-            Dưới đây là câu hỏi bạn cần trả lời:
-            {question}
+            **Nhiệm vụ**:
+                Dưới đây là câu hỏi bạn cần trả lời:
+                {question}
 
             Tài liệu tham khảo:
             {context}
@@ -26,13 +27,14 @@ class Generator:
     
 
     def _set_comparison_template(self):
-        """Template for SO_SANH intent"""
+
         system_prompt = COMPARISON_PROMPT
         
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-            Dựa vào tài liệu tham khảo dưới đây, hãy so sánh điểm giống và khác nhau về {topic} giữa {entities}.
+            **Nhiệm vụ**:
+                Dựa vào tài liệu tham khảo dưới đây, hãy so sánh điểm giống và khác nhau về {topic} giữa {entities}.
 
             Tài liệu tham khảo:
             {context}
@@ -41,12 +43,13 @@ class Generator:
     
     
     def _set_analysis_template(self):
-        """Template for PHAN_TICH intent"""
+
         system_prompt = ANALYSIS_PROMPT
         
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
+            **Nhiệm vụ**:
             Dựa trên các quy định pháp luật dưới đây, hãy viết một bài phân tích có cấu trúc, logic về {topic}. 
 
             Tài liệu tham khảo:

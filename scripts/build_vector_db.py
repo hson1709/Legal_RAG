@@ -4,6 +4,9 @@ from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharact
 import re
 from tqdm import tqdm 
 import pickle
+from config import RAW_DATA_PATH
+from src.components.model_loader import load_embedding_model
+from src.components.data_processor import load_content_doc, preprocess_text, preprocess_legal_documents_to_markdown, extract_legal_metadata
 
 
 def clean_metadata(metadata):
@@ -164,30 +167,38 @@ def create_and_save_parent_documents(
     return parent_documents
 
 
-#create_vectordb( 
+data_path = RAW_DATA_PATH
+embedding_model = load_embedding_model()
+raw_legal_docs = load_content_doc(data_path)
+preprocessed_legal_docs = preprocess_text(raw_legal_docs)
+markdown_legal_docs = preprocess_legal_documents_to_markdown(preprocessed_legal_docs)
+legal_metadata = extract_legal_metadata(markdown_legal_docs)
+
+
+create_vectordb( 
     docs=markdown_legal_docs,
     legal_metadata=legal_metadata,
     embedding_model=embedding_model,
-    persist_directory="./vector_db_512",
+    persist_directory="./vector_stores/bm_db_legal_512",
     chunk_size = 512,
     chunk_overlap = 50
-#)
+)
 
 
 
-#create_vectordb( 
+create_vectordb( 
     docs=markdown_legal_docs,
     legal_metadata=legal_metadata,
     embedding_model=embedding_model,
-    persist_directory="./vector_db_1024",
+    persist_directory="./vector_stores/bm_db_legal_1024",
     chunk_size = 1024,
     chunk_overlap = 100
-#)
+)
 
 
-#parent_docs = create_and_save_parent_documents(
+parent_docs = create_and_save_parent_documents(
     docs=markdown_legal_docs,
     legal_metadata=legal_metadata,
     persist_path="./parent_documents.pkl"
-#)
+)
 
