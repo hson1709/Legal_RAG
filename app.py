@@ -4,11 +4,13 @@ from datetime import datetime
 from src.components.model_loader import load_embedding_model, load_llm, load_reranking_model
 from src.components.generator import Generator
 from src.components.hybrid_retriever import HybridRetriever
+from src.components.vector_retriever import VectorRetriever
+from src.components.keyword_retriever import KeywordRetriever
 from src.components.intent_classifier import IntentClassifier
 from src.components.reranker import CrossEncoderReRanker
+from src.components.search_mode import SearchMode
 from src.pipline import RAGPipeline
 
-# Cấu hình trang
 st.set_page_config(
     page_title="Chatbot Tư vấn Pháp luật",
     page_icon="⚖️",
@@ -16,7 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS để làm đẹp giao diện
 st.markdown("""
 <style>
     .main-header {
@@ -115,6 +116,34 @@ st.markdown("""
         color: #856404;
         border: 1px solid #ffeaa7;
     }
+    .search-mode-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: bold;
+        margin-left: 0.5rem;
+    }
+    .vector-badge {
+        background-color: #e3f2fd;
+        color: #1976d2;
+        border: 1px solid #bbdefb;
+    }
+    .keyword-badge {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+        border: 1px solid #ce93d8;
+    }
+    .hybrid-badge {
+        background-color: #e8f5e8;
+        color: #388e3c;
+        border: 1px solid #a5d6a7;
+    }
+    .reranker-badge {
+        background-color: #fff3e0;
+        color: #f57c00;
+        border: 1px solid #ffcc02;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -130,6 +159,7 @@ def init_session_state():
     if 'current_model' not in st.session_state:
         st.session_state.current_model = None
 
+
 @st.cache_resource
 def load_pipelines_for_model(model_provider):
     """Load both 512 and 1024 pipelines for a model"""
@@ -140,8 +170,22 @@ def load_pipelines_for_model(model_provider):
     reranking_model = load_reranking_model()
     reranker = CrossEncoderReRanker(reranking_model)
     
-    # Create retriever for 512 chunks
-    retriever_512 = HybridRetriever(
+    # Create retrievers for 512 chunks
+    vector_retriever_512 = VectorRetriever(
+        embedding_model=embedding_model,
+        persist_directory="./vector_stores/bm_db_legal_512",
+        chunk_size=512,
+        chunk_overlap=50,
+        num_chunks=10
+    )
+    
+    keyword_retriever_512 = KeywordRetriever(
+        corpus_path_512="./data/bm25_corpus_512.pkl",
+        corpus_path_1024="./data/bm25_corpus_1024.pkl",
+        num_chunks=10
+    )
+    
+    hybrid_retriever_512 = HybridRetriever(
         embedding_model=embedding_model,
         persist_directory="./vector_stores/bm_db_legal_512",
         chunk_size=512,
@@ -149,8 +193,22 @@ def load_pipelines_for_model(model_provider):
         reranker=reranker
     )
     
-    # Create retriever for 1024 chunks
-    retriever_1024 = HybridRetriever(
+    # Create retrievers for 1024 chunks
+    vector_retriever_1024 = VectorRetriever(
+        embedding_model=embedding_model,
+        persist_directory="./vector_stores/bm_db_legal_1024",
+        chunk_size=1024,
+        chunk_overlap=100,
+        num_chunks=10
+    )
+    
+    keyword_retriever_1024 = KeywordRetriever(
+        corpus_path_512="./data/bm25_corpus_512.pkl",
+        corpus_path_1024="./data/bm25_corpus_1024.pkl",
+        num_chunks=10
+    )
+    
+    hybrid_retriever_1024 = HybridRetriever(
         embedding_model=embedding_model,
         persist_directory="./vector_stores/bm_db_legal_1024",
         chunk_size=1024,
@@ -158,9 +216,23 @@ def load_pipelines_for_model(model_provider):
         reranker=reranker
     )
     
-    # Create pipelines
-    pipeline_512 = RAGPipeline(retriever_512, generator, classifier, llm)
-    pipeline_1024 = RAGPipeline(retriever_1024, generator, classifier, llm)
+    # Create enhanced pipelines
+    pipeline_512 = RAGPipeline(
+        vector_retriever_512, 
+        keyword_retriever_512, 
+        hybrid_retriever_512,
+        generator, 
+        classifier, 
+        llm
+    )
+    pipeline_1024 = RAGPipeline(
+        vector_retriever_1024, 
+        keyword_retriever_1024, 
+        hybrid_retriever_1024,
+        generator, 
+        classifier, 
+        llm
+    )
     
     return pipeline_512, pipeline_1024
 
@@ -182,7 +254,19 @@ def get_model_info(provider):
             "color": "#666666"
         }
 
-def display_message(role, content, context=None, timestamp=None, model_info=None):
+def get_search_mode_badge(search_mode, use_reranker):
+    """Get search mode badge HTML"""
+    mode_badges = {
+        "vector": '<span class="search-mode-badge vector-badge"> Vector</span>',
+        "keyword": '<span class="search-mode-badge keyword-badge"> Keyword</span>',
+        "hybrid": '<span class="search-mode-badge hybrid-badge"> Hybrid</span>'
+    }
+    
+    reranker_badge = '<span class="search-mode-badge reranker-badge"> Reranker</span>' if use_reranker else ''
+    
+    return mode_badges.get(search_mode, '') + reranker_badge
+
+def display_message(role, content, context=None, timestamp=None, model_info=None, search_mode=None, use_reranker=None):
     if role == "user":
         st.markdown(f"""
         <div class="chat-message user-message">
@@ -191,20 +275,31 @@ def display_message(role, content, context=None, timestamp=None, model_info=None
         </div>
         """, unsafe_allow_html=True)
     else:
+        search_badge = get_search_mode_badge(search_mode, use_reranker) if search_mode else ""
         st.markdown(f"""
         <div class="chat-message bot-message">
-            <strong>🤖 Chatbot:</strong><br>{content}
+            <strong>💡Chatbot:</strong>{search_badge}<br>{content}
             {f"<br><small>📅 {timestamp}</small>" if timestamp else ""}
         </div>
         """, unsafe_allow_html=True)
 
-def update_retriever_params(retriever, vector_num_chunks, keyword_num_chunks, hybrid_num_chunks, num_final_docs, vector_search_weight):
+def update_retriever_params(pipeline, vector_num_chunks, keyword_num_chunks, hybrid_num_chunks, num_final_docs, vector_search_weight):
     """Update retriever parameters without reloading"""
-    retriever.vector_retriever.num_chunks = vector_num_chunks
-    retriever.keyword_retriever.num_chunks = keyword_num_chunks
-    retriever.hybrid_num_chunks = hybrid_num_chunks
-    retriever.num_final_docs = num_final_docs
-    retriever.vector_search_weight = vector_search_weight
+    pipeline.vector_retriever.num_chunks = vector_num_chunks
+    pipeline.keyword_retriever.num_chunks = keyword_num_chunks
+    pipeline.hybrid_retriever.vector_retriever.num_chunks = vector_num_chunks
+    pipeline.hybrid_retriever.keyword_retriever.num_chunks = keyword_num_chunks
+    pipeline.hybrid_retriever.hybrid_num_chunks = hybrid_num_chunks
+    pipeline.hybrid_retriever.num_final_docs = num_final_docs
+    pipeline.hybrid_retriever.vector_search_weight = vector_search_weight
+    
+    # Update pipeline retrieval params
+    pipeline.set_retrieval_params(
+        num_final_docs=num_final_docs,
+        vector_search_weight=vector_search_weight,
+        hybrid_num_chunks=hybrid_num_chunks
+    )
+
 
 def main():
     init_session_state()
@@ -215,12 +310,31 @@ def main():
         st.header("⚙️ Cấu hình")
         
         # Model Selection
-        st.subheader("🤖 Chọn Model AI")
+        st.subheader("Chọn Model AI")
         model_provider = st.selectbox(
             "Mô hình:",
             ["google", "openai"],
             format_func=lambda x: "Google Gemini" if x == "google" else "OpenAI GPT",
             help="Chọn model AI để xử lý câu hỏi của bạn"
+        )
+        
+        # Search Mode Configuration
+        st.subheader("🔍 Chế độ tìm kiếm")
+        search_mode = st.selectbox(
+            "Phương pháp tìm kiếm:",
+            ["hybrid", "vector", "keyword"],
+            format_func=lambda x: {
+                "hybrid": " Hybrid Search (Vector + Keyword)",
+                "vector": " Vector Search (Semantic)",
+                "keyword": " Keyword Search (BM25)"
+            }[x],
+            help="Chọn phương pháp tìm kiếm tài liệu"
+        )
+        
+        use_reranker = st.checkbox(
+            "📚 Sử dụng Reranker",
+            value=True,
+            help="Sử dụng mô hình reranking để cải thiện độ chính xác"
         )
         
         # Chunk Configuration
@@ -233,67 +347,74 @@ def main():
         )
         
         with st.container():
+            keyword_num_chunks = 10
+            vector_num_chunks = 10
+            hybrid_num_chunks = 5
+            vector_search_weight = 0.6
+
+            if search_mode in ["vector", "hybrid"]:
+                st.markdown("**Vector Retriever:**")
+                vector_num_chunks = st.number_input(
+                    "Số chunks vector retriever:",
+                    min_value=1,
+                    max_value=100,
+                    value=10,
+                    step=1,
+                    help="Số lượng chunks được truy xuất bởi vector retriever"
+                )
+
+            if search_mode in ["keyword", "hybrid"]:
+                st.markdown("**Keyword Retriever:**")
+                keyword_num_chunks = st.number_input(
+                    "Số chunks keyword retriever:",
+                    min_value=1,
+                    max_value=100,
+                    value=10,
+                    step=1,
+                    help="Số lượng chunks được truy xuất bởi keyword retriever (BM25)"
+                )
             
-            st.markdown("**Vector Retriever:**")
-            vector_num_chunks = st.number_input(
-                "Số chunks vector retriever:",
-                min_value=1,
-                max_value=50,
-                value=10,
-                step=1,
-                help="Số lượng chunks được truy xuất bởi vector retriever"
-            )
-            
-            st.markdown("**Keyword Retriever:**")
-            keyword_num_chunks = st.number_input(
-                "Số chunks keyword retriever:",
-                min_value=1,
-                max_value=50,
-                value=10,
-                step=1,
-                help="Số lượng chunks được truy xuất bởi keyword retriever (BM25)"
-            )
-            
-            st.markdown("**Hybrid with Reranker Documents:**")
-            hybrid_num_chunks = st.number_input(
-                "Số chunks hybrid retriever:",
-                min_value=1,
-                max_value=20,
-                value=5,
-                step=1,
-                help="ố lượng chunks được truy xuất bởi hybrid retriever (dense + spare)"
-            )
+            if search_mode == "hybrid":
+                st.markdown("**Hybrid Parameters:**")
+                hybrid_num_chunks = st.number_input(
+                    "Số chunks hybrid retriever:",
+                    min_value=1,
+                    max_value=100,
+                        value=5,
+                    step=1,
+                    help="Số lượng chunks được truy xuất bởi hybrid retriever (dense + sparse)"
+                )
+
+            if search_mode == "hybrid":
+                vector_search_weight = st.number_input(
+                    "Tỉ lệ tài liệu lấy từ vector retriever:",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.6,
+                    step=0.1,
+                    help="Số phần trăm tài liệu lấy từ vector retriever"
+                )
+            else:
+                hybrid_num_chunks = 5
+                vector_search_weight = 0.6
 
             st.markdown("**Final Documents Output:**")
             num_final_docs = st.number_input(
                 "Số tài liệu cuối cùng:",
                 min_value=1,
-                max_value=20,
+                max_value=100,
                 value=5,
                 step=1,
-                help="Số lượng tài liệu cuối cùng sau khi merge từ cả vector và keyword retriever"
-            )
-
-            st.markdown("**Vector Search Weight**")
-            vector_search_weight = st.number_input(
-                "Tỉ lệ tài liệu lấy từ vector retriever:",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.6,
-                step=0.1,
-                help="Số phần trăm tài liệu lấy từ vector retriever"
+                help="Số lượng tài liệu cuối cùng được sử dụng để tạo câu trả lời"
             )
             
             st.markdown('</div>', unsafe_allow_html=True)
         
-        
-
         # Clear chat history
         if st.button("🗑️ Xóa lịch sử trò chuyện"):
             st.session_state.messages = []
             st.success("Đã xóa lịch sử!")
             st.rerun()
-
 
     # Load pipelines when model changes or first load
     if st.session_state.current_model != model_provider or not st.session_state.pipeline_loaded:
@@ -301,10 +422,14 @@ def main():
             try:
                 pipeline_512, pipeline_1024 = load_pipelines_for_model(model_provider)
                 
+                # Convert to SearchMode
+                modified_pipeline_512 = SearchMode(pipeline_512)
+                modified_pipeline_1024 = SearchMode(pipeline_1024)
+                
                 # Store pipelines for current model
                 st.session_state.pipelines[model_provider] = {
-                    "512": pipeline_512,
-                    "1024": pipeline_1024
+                    "512": modified_pipeline_512,
+                    "1024": modified_pipeline_1024
                 }
                 
                 st.session_state.current_model = model_provider
@@ -329,14 +454,15 @@ def main():
                 message["content"],
                 message.get("context"),
                 message.get("timestamp"),
-                model_info
+                model_info,
+                message.get("search_mode"),
+                message.get("use_reranker")
             )
         
         if st.session_state.processing:
             with st.spinner("Đang xử lý câu hỏi..."):
                 st.empty()
 
-    # Input form
     input_container = st.container()
     with input_container:
         with st.form("question_form", clear_on_submit=True):
@@ -361,7 +487,6 @@ def main():
         st.session_state.processing = True
         timestamp = datetime.now().strftime("%H:%M:%S")
         
-        # Add user message
         st.session_state.messages.append({
             "role": "user",
             "content": question,
@@ -371,30 +496,28 @@ def main():
         st.toast(f"Đang xử lý với {get_model_info(model_provider)['name']}...", icon="⌛")
         st.rerun()
 
-    # Process the question
     if st.session_state.processing and len(st.session_state.messages) > 0:
         last_message = st.session_state.messages[-1]
         if last_message["role"] == "user":
             try:
-                # Get the appropriate pipeline
                 current_pipelines = st.session_state.pipelines.get(model_provider)
                 if not current_pipelines:
                     st.error("Pipeline chưa được tải!")
                     st.session_state.processing = False
                     st.stop()
                 
-                # Select pipeline based on chunk size
                 pipeline = current_pipelines["1024"] if chunk_size == 1024 else current_pipelines["512"]
                 
-                # Update retriever parameters dynamically
                 update_retriever_params(
-                    pipeline.retriever, 
+                    pipeline.pipeline, 
                     vector_num_chunks, 
                     keyword_num_chunks, 
                     hybrid_num_chunks,
                     num_final_docs,
                     vector_search_weight
                 )
+                
+                pipeline.set_search_config(search_mode, use_reranker)
                 
                 with st.spinner(f"Đang tìm kiếm thông tin với {get_model_info(model_provider)['name']}..."):
                     answer = pipeline.run(last_message["content"])
@@ -406,12 +529,14 @@ def main():
                         "content": answer,
                         "timestamp": answer_timestamp,
                         "model": model_provider,
+                        "search_mode": search_mode,
+                        "use_reranker": use_reranker,
                         "params": {
                             "chunk_size": chunk_size,
                             "vector_chunks": vector_num_chunks,
                             "keyword_chunks": keyword_num_chunks,
                             "hybrid_chunks": hybrid_num_chunks,
-                            "final_docs" : num_final_docs,
+                            "final_docs": num_final_docs,
                             "vector_weight": vector_search_weight
                         }
                     })
@@ -427,21 +552,27 @@ def main():
     elif submitted and not question.strip():
         st.warning("⚠️ Vui lòng nhập câu hỏi!")
 
-    # Footer
     with st.container():
         st.markdown("---")
         current_model_info = get_model_info(st.session_state.current_model or model_provider)
+        
+        search_display = {
+            "hybrid": f"Hybrid ({'rerank mode' if use_reranker else 'normal'})",
+            "vector": f"Vector ({'rerank mode' if use_reranker else 'normal'})", 
+            "keyword": f"Keyword ({'rerank mode' if use_reranker else 'normal'})"
+        }[search_mode]
+        
         st.markdown(
             f"""
             <div style="text-align: center; color: #666; font-size: 0.9rem; margin-top: 1rem;">
                 <p>🤖 Chatbot Tư vấn Pháp luật - Powered by Hybrid RAG Technology</p>
-                <p>Đang sử dụng: <strong>{current_model_info['name']}</strong> | 
+                <p>Model: <strong>{current_model_info['name']}</strong> | 
+                Search: <strong>{search_display}</strong> | 
                 Chunk: <strong>{chunk_size}</strong> | 
                 Vector: <strong>{vector_num_chunks}</strong> | 
-                Keyword: <strong>{keyword_num_chunks}</strong> | 
-                Hybrid: <strong>{hybrid_num_chunks}</strong> |
-                Final Docs <strong>{num_final_docs}</strong> |
-                Vector Weight <strong>{vector_search_weight}</strong></p>
+                Keyword: <strong>{keyword_num_chunks}</strong>""" + 
+                (f" | Hybrid: <strong>{hybrid_num_chunks}</strong> | Vector Weight: <strong>{vector_search_weight}</strong>" if search_mode == "hybrid" else "") + 
+                f""" | Final: <strong>{num_final_docs}</strong></p>
                 <p><em>Lưu ý: Thông tin chỉ mang tính chất tham khảo, không thay thế tư vấn pháp lý chuyên nghiệp</em></p>
             </div>
             """,
