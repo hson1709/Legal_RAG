@@ -14,6 +14,7 @@ A chatbot built with RAG (Retrieval-Augmented Generation), designed to provide a
 - **Reranker for accuracy improvement**
   - A CrossEncoder reranker re-scores retrieved documents for relevance to the query
   - Improves final document ranking before generating answers
+- **Select search mode**: Choosing retriever for searching documents.
 - **RAG-based Question Answering**: Combines vector retrieval with generative answers
 - **Streamlit Web Interface**: Easy-to-use chat-based frontend
 - **Source Citations**: Display exact documents and article numbers used in answers
