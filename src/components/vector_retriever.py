@@ -5,28 +5,30 @@ from langchain_community.vectorstores import Chroma
 from config import PARENT_DOCUMENTS, PERSIST_DIRECTORY
 from tqdm import tqdm 
 import pickle
-from typing import List, Any, Union
+from typing import List, Any, Union, Dict, Optional
 from src.components.retriever import BaseRetriever
 
 
 metadata_label_map = {
-    "dieu": "Điều",
-    "muc": "Mục",
-    "chuong": "Chương",
-    "loai_van_ban": "Loại văn bản",
-    "chu_de": "Chủ đề",
     "ma_so": "Mã số",
-    "ngay_ban_hanh": "Ngày ban hành",
-    "noi_ban_hanh": "Nơi ban hành",
+    "chu_de": "Chủ đề",
+    "loai_van_ban": "Loại văn bản",
     "co_quan_ban_hanh": "Cơ quan ban hành",
-    "can_cu": "Căn cứ"
+    "noi_ban_hanh": "Nơi ban hành",
+    "ngay_ban_hanh": "Ngày ban hành",
+    "tinh_trang": "Tình trạng",
+    "chuong": "Chương",
+    "ten_chuong": "Tên chương",
+    "muc": "Mục",
+    "ten_muc": "Tên mục",
+    "ten_dieu": "Tên điều"
 }
 
 class VectorRetriever(BaseRetriever):
     def __init__(
         self,
         embedding_model,
-        pickle_path="./data/parent_documents.pkl",
+        pickle_path="./data/parent_documents_mongo.pkl",
         persist_directory="./vector_stores",
         collection_name="law_docs",
         chunk_size=1024,
@@ -71,7 +73,6 @@ class VectorRetriever(BaseRetriever):
         return docstore, child_documents
     
     def _get_unique_parent_docs_from_child_docs_with_scores(self, child_docs_with_scores: List) -> List[tuple]:
-
         parent_doc_scores = {}
         
         for child_doc, score in child_docs_with_scores:
@@ -81,16 +82,14 @@ class VectorRetriever(BaseRetriever):
                 if parent_doc:
                     parent_doc_scores[parent_id] = (parent_doc, score)
             elif parent_id in parent_doc_scores:
-         
+                # Keep the higher score
                 if score > parent_doc_scores[parent_id][1]:
                     parent_doc_scores[parent_id] = (parent_doc_scores[parent_id][0], score)
         
-
         sorted_docs = sorted(parent_doc_scores.values(), key=lambda x: x[1], reverse=True)
         return sorted_docs
 
     def _get_unique_parent_docs_from_child_docs(self, child_docs: List) -> List[Any]:
-
         seen_parent_ids = set()
         unique_parent_docs = []
         
@@ -122,8 +121,83 @@ class VectorRetriever(BaseRetriever):
         
         return "\n\n".join(contexts)
 
-    def get_unique_parent_docs_with_scores(self, queries: Union[str, List[str]]) -> List[tuple]:
+    def _safe_vector_search_with_score(self, query: str, k: int, where_clause: Optional[Dict] = None):
+        """
+        Safe vector search that handles where clause conflicts
+        
+        Args:
+            query: Search query
+            k: Number of results to return
+            where_clause: Optional ChromaDB where clause for filtering
+            
+        Returns:
+            List of (document, score) tuples
+        """
+        try:
+            if where_clause:
+                # Try with where clause first
+                return self.vectorstore.similarity_search_with_score(
+                    query=query, 
+                    k=k,
+                    filter=where_clause
+                )
+            else:
+                # Normal search without where clause
+                return self.vectorstore.similarity_search_with_score(query, k=k)
+                
+        except Exception as e:
+            print(f"Error with where clause in vector search: {e}")
+            # Fallback to normal search if where clause fails
+            try:
+                return self.vectorstore.similarity_search_with_score(query, k=k)
+            except Exception as fallback_error:
+                print(f"Fallback vector search also failed: {fallback_error}")
+                return []
 
+    def _safe_vector_search(self, query: str, k: int, where_clause: Optional[Dict] = None):
+        """
+        Safe vector search that handles where clause conflicts
+        
+        Args:
+            query: Search query
+            k: Number of results to return
+            where_clause: Optional ChromaDB where clause for filtering
+            
+        Returns:
+            List of documents
+        """
+        try:
+            if where_clause:
+                # Try with where clause first
+                return self.vectorstore.similarity_search(
+                    query=query, 
+                    k=k,
+                    filter=where_clause
+                )
+            else:
+                # Normal search without where clause
+                return self.vectorstore.similarity_search(query, k=k)
+                
+        except Exception as e:
+            print(f"Error with where clause in vector search: {e}")
+            # Fallback to normal search if where clause fails
+            try:
+                return self.vectorstore.similarity_search(query, k=k)
+            except Exception as fallback_error:
+                print(f"Fallback vector search also failed: {fallback_error}")
+                return []
+
+    def get_unique_parent_docs_with_scores(self, queries: Union[str, List[str]], where_clause: Optional[Dict] = None) -> List[tuple]:
+        """
+        Get unique parent documents with scores, optionally filtered by where_clause
+        
+        Args:
+            queries: Search query or list of queries
+            where_clause: Optional ChromaDB where clause for filtering
+            
+        Returns:
+            List of (parent_doc, score) tuples
+        """
         if isinstance(queries, str):
             queries = [queries]
         
@@ -132,13 +206,24 @@ class VectorRetriever(BaseRetriever):
         for query in queries:
             if not query.strip(): 
                 continue
-            child_docs = self.vectorstore.similarity_search_with_score(query, k=self.num_chunks)
+            
+            # Use safe search method
+            child_docs = self._safe_vector_search_with_score(query, self.num_chunks, where_clause)
             all_child_docs_with_scores.extend(child_docs)
         
         return self._get_unique_parent_docs_from_child_docs_with_scores(all_child_docs_with_scores)
 
-    def get_unique_parent_docs(self, queries: Union[str, List[str]]) -> List[Any]:
-
+    def get_unique_parent_docs(self, queries: Union[str, List[str]], where_clause: Optional[Dict] = None) -> List[Any]:
+        """
+        Get unique parent documents, optionally filtered by where_clause
+        
+        Args:
+            queries: Search query or list of queries
+            where_clause: Optional ChromaDB where clause for filtering
+            
+        Returns:
+            List of parent documents
+        """
         if isinstance(queries, str):
             queries = [queries]
         
@@ -147,11 +232,23 @@ class VectorRetriever(BaseRetriever):
         for query in queries:
             if not query.strip(): 
                 continue
-            child_docs = self.vectorstore.similarity_search(query, k=self.num_chunks)
+            
+            # Use safe search method
+            child_docs = self._safe_vector_search(query, self.num_chunks, where_clause)
             all_child_docs.extend(child_docs)
         
         return self._get_unique_parent_docs_from_child_docs(all_child_docs)
 
-    def retrieve(self, queries: Union[str, List[str]]) -> str:
-        parent_docs = self.get_unique_parent_docs(queries)
+    def retrieve(self, queries: Union[str, List[str]], where_clause: Optional[Dict] = None) -> str:
+        """
+        Retrieve formatted context, optionally filtered by where_clause
+        
+        Args:
+            queries: Search query or list of queries  
+            where_clause: Optional ChromaDB where clause for filtering
+            
+        Returns:
+            Formatted context string
+        """
+        parent_docs = self.get_unique_parent_docs(queries, where_clause)
         return self._format_context(parent_docs)

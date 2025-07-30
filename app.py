@@ -3,10 +3,11 @@ from datetime import datetime
 
 from src.components.model_loader import load_embedding_model, load_llm, load_reranking_model
 from src.components.generator import Generator
-from src.components.hybrid_retriever import HybridRetriever
+from src.components.hybrid_retriever_mongo import HybridRetriever
 from src.components.vector_retriever import VectorRetriever
 from src.components.keyword_retriever import KeywordRetriever
 from src.components.intent_classifier import IntentClassifier
+from src.components.filter_extractor import FilterExtractor
 from src.components.reranker import CrossEncoderReRanker
 from src.components.search_mode import SearchMode
 from src.pipline import RAGPipeline
@@ -168,62 +169,63 @@ def load_pipelines_for_model(model_provider):
     generator = Generator()
     classifier = IntentClassifier(llm=llm)
     reranking_model = load_reranking_model()
+    filter_extractor = FilterExtractor(llm=llm)
     reranker = CrossEncoderReRanker(reranking_model)
     
-    # Create retrievers for 512 chunks
     vector_retriever_512 = VectorRetriever(
         embedding_model=embedding_model,
-        persist_directory="./vector_stores/bm_db_legal_512",
+        persist_directory="./vector_stores/bm_db_legal_512_mongo",
         chunk_size=512,
         chunk_overlap=50,
         num_chunks=10
     )
     
     keyword_retriever_512 = KeywordRetriever(
-        corpus_path_512="./data/bm25_corpus_512.pkl",
-        corpus_path_1024="./data/bm25_corpus_1024.pkl",
+        corpus_path_512="./data/bm25_corpus_512_mongo.pkl",
+        corpus_path_1024="./data/bm25_corpus_1024_mongo.pkl",
         num_chunks=10
     )
     
     hybrid_retriever_512 = HybridRetriever(
         embedding_model=embedding_model,
-        persist_directory="./vector_stores/bm_db_legal_512",
+        persist_directory="./vector_stores/bm_db_legal_512_mongo",
         chunk_size=512,
         chunk_overlap=50,
-        reranker=reranker
+        reranker=reranker,
+        filter_extractor=filter_extractor
     )
     
-    # Create retrievers for 1024 chunks
     vector_retriever_1024 = VectorRetriever(
         embedding_model=embedding_model,
-        persist_directory="./vector_stores/bm_db_legal_1024",
+        persist_directory="./vector_stores/bm_db_legal_1024_mongo",
         chunk_size=1024,
         chunk_overlap=100,
         num_chunks=10
     )
     
     keyword_retriever_1024 = KeywordRetriever(
-        corpus_path_512="./data/bm25_corpus_512.pkl",
-        corpus_path_1024="./data/bm25_corpus_1024.pkl",
+        corpus_path_512="./data/bm25_corpus_512_mongo.pkl",
+        corpus_path_1024="./data/bm25_corpus_1024_mongo.pkl",
         num_chunks=10
     )
     
     hybrid_retriever_1024 = HybridRetriever(
         embedding_model=embedding_model,
-        persist_directory="./vector_stores/bm_db_legal_1024",
+        persist_directory="./vector_stores/bm_db_legal_1024_mongo",
         chunk_size=1024,
         chunk_overlap=100,
-        reranker=reranker
+        reranker=reranker,
+        filter_extractor=filter_extractor
     )
     
-    # Create enhanced pipelines
     pipeline_512 = RAGPipeline(
         vector_retriever_512, 
         keyword_retriever_512, 
         hybrid_retriever_512,
         generator, 
         classifier, 
-        llm
+        llm,
+        filter_extractor=filter_extractor
     )
     pipeline_1024 = RAGPipeline(
         vector_retriever_1024, 
@@ -231,13 +233,14 @@ def load_pipelines_for_model(model_provider):
         hybrid_retriever_1024,
         generator, 
         classifier, 
-        llm
+        llm,
+        filter_extractor=filter_extractor
     )
     
     return pipeline_512, pipeline_1024
 
 def get_model_info(provider):
-    """Get model information for display"""
+
     if provider == "openai":
         return {
             "name": "OpenAI GPT",
@@ -255,7 +258,7 @@ def get_model_info(provider):
         }
 
 def get_search_mode_badge(search_mode, use_reranker):
-    """Get search mode badge HTML"""
+
     mode_badges = {
         "vector": '<span class="search-mode-badge vector-badge"> Vector</span>',
         "keyword": '<span class="search-mode-badge keyword-badge"> Keyword</span>',
@@ -284,7 +287,7 @@ def display_message(role, content, context=None, timestamp=None, model_info=None
         """, unsafe_allow_html=True)
 
 def update_retriever_params(pipeline, vector_num_chunks, keyword_num_chunks, hybrid_num_chunks, num_final_docs, vector_search_weight):
-    """Update retriever parameters without reloading"""
+
     pipeline.vector_retriever.num_chunks = vector_num_chunks
     pipeline.keyword_retriever.num_chunks = keyword_num_chunks
     pipeline.hybrid_retriever.vector_retriever.num_chunks = vector_num_chunks
@@ -293,7 +296,6 @@ def update_retriever_params(pipeline, vector_num_chunks, keyword_num_chunks, hyb
     pipeline.hybrid_retriever.num_final_docs = num_final_docs
     pipeline.hybrid_retriever.vector_search_weight = vector_search_weight
     
-    # Update pipeline retrieval params
     pipeline.set_retrieval_params(
         num_final_docs=num_final_docs,
         vector_search_weight=vector_search_weight,
@@ -309,7 +311,6 @@ def main():
     with st.sidebar:
         st.header("⚙️ Cấu hình")
         
-        # Model Selection
         st.subheader("Chọn Model AI")
         model_provider = st.selectbox(
             "Mô hình:",
@@ -318,7 +319,6 @@ def main():
             help="Chọn model AI để xử lý câu hỏi của bạn"
         )
         
-        # Search Mode Configuration
         st.subheader("🔍 Chế độ tìm kiếm")
         search_mode = st.selectbox(
             "Phương pháp tìm kiếm:",
@@ -337,7 +337,6 @@ def main():
             help="Sử dụng mô hình reranking để cải thiện độ chính xác"
         )
         
-        # Chunk Configuration
         st.subheader("📄 Cấu hình Chunk")
         chunk_size = st.selectbox(
             "Kích thước chunk:",
@@ -410,23 +409,19 @@ def main():
             
             st.markdown('</div>', unsafe_allow_html=True)
         
-        # Clear chat history
         if st.button("🗑️ Xóa lịch sử trò chuyện"):
             st.session_state.messages = []
             st.success("Đã xóa lịch sử!")
             st.rerun()
 
-    # Load pipelines when model changes or first load
     if st.session_state.current_model != model_provider or not st.session_state.pipeline_loaded:
         with st.spinner(f"🔄 Đang tải model {get_model_info(model_provider)['name']}..."):
             try:
                 pipeline_512, pipeline_1024 = load_pipelines_for_model(model_provider)
                 
-                # Convert to SearchMode
                 modified_pipeline_512 = SearchMode(pipeline_512)
                 modified_pipeline_1024 = SearchMode(pipeline_1024)
                 
-                # Store pipelines for current model
                 st.session_state.pipelines[model_provider] = {
                     "512": modified_pipeline_512,
                     "1024": modified_pipeline_1024
@@ -441,7 +436,6 @@ def main():
                 st.error(f"❌ Lỗi khi tải model: {str(e)}")
                 st.stop()
 
-    # Display chat history
     chat_container = st.container()
     with chat_container:
         for message in st.session_state.messages:
@@ -482,7 +476,6 @@ def main():
                     disabled=st.session_state.processing
                 )
 
-    # Handle form submission
     if submitted and question.strip() and not st.session_state.processing:
         st.session_state.processing = True
         timestamp = datetime.now().strftime("%H:%M:%S")

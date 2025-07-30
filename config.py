@@ -18,7 +18,14 @@ RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 GPT_MODEL = "gpt-4o"
 GEMINI_MODEL = "gemini-2.5-pro"
 PARENT_DOCUMENTS = os.path.join(PROJECT_ROOT, "data", "parent_documents.pkl")
+MONGODB_URI = os.getenv("MONGODB_URI")
+MONGODB_CONFIG = {
+    "mongodb_uri": MONGODB_URI,
+    "mongodb_db_name": "legal_docs",
+    "mongodb_collection_name_512": "legal_documents_512",
+    "mongodb_collection_name_1024": "legal_documents_1024"
+}
 
 
 
-__all__ = ["OPENAI_API_KEY","GOOGLE_API_KEY", "RAW_DATA_PATH", "PERSIST_DIRECTORY", "EMBEDDING_MODEL", "RERANKER_MODEL", "GPT_MODEL", "GEMINI_MODEL", "DEVICE", "PARENT_DOCUMENTS"]
+__all__ = ["OPENAI_API_KEY","GOOGLE_API_KEY", "RAW_DATA_PATH", "PERSIST_DIRECTORY", "EMBEDDING_MODEL", "RERANKER_MODEL", "GPT_MODEL", "GEMINI_MODEL", "DEVICE", "PARENT_DOCUMENTS", "MONGODB_CONFIG"]

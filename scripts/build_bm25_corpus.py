@@ -4,14 +4,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import pickle
 from tqdm import tqdm 
 import re
-from rank_bm25 import BM25Okapi
-from config import PARENT_DOCUMENTS
 
 
 class BM25CorpusBuilder:
     def __init__(
         self,
-        pickle_path = PARENT_DOCUMENTS,
+        pickle_path = "./data/parent_documents_mongo.pkl",
         chunk_size = 1024,
         chunk_overlap = 100
     ):
@@ -99,5 +97,5 @@ class BM25CorpusBuilder:
 
 corpus_bm25_512 = BM25CorpusBuilder(chunk_size=512, chunk_overlap=50)
 corpus_bm25_1024 = BM25CorpusBuilder(chunk_size=1024, chunk_overlap=100)
-corpus_bm25_512.build_and_save_corpus(".data/bm25_corpus_512.pkl")
-corpus_bm25_1024.build_and_save_corpus(".data/bm25_corpus_1024.pkl")
+corpus_bm25_512.build_and_save_corpus("D:/legal_rag_project/data/bm25_corpus_512_mongo.pkl")
+corpus_bm25_1024.build_and_save_corpus("D:/legal_rag_project/data/bm25_corpus_1024_mongo.pkl")

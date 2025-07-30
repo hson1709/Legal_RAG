@@ -1,7 +1,5 @@
 venv/
 .env
 model/
-vector_stores/bm_db_legal_512/chroma.sqlite3
-vector_stores/bm_db_legal_1024/chroma.sqlite3
 __pycache__/
 *.pyc
