@@ -1,10 +1,12 @@
 from typing import List, Any, Union, Tuple
+from langsmith import traceable
 
 class CrossEncoderReRanker:
     
     def __init__(self, reranking_model):
             self.reranking_model = reranking_model
     
+    @traceable
     def rerank_documents(
         self, 
         queries: Union[str, List[str]], 

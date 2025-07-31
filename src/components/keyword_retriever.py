@@ -4,6 +4,7 @@ from underthesea import word_tokenize
 import pickle
 import re
 from rank_bm25 import BM25Okapi
+from langsmith import traceable
 
 metadata_label_map = {
     "dieu": "Điều",
@@ -137,6 +138,7 @@ class KeywordRetriever(BaseRetriever):
         
         return results
 
+    @traceable
     def get_unique_parent_docs_with_scores(self, queries: Union[str, List[str]], use_512: bool = True) -> List[tuple]:
 
         if isinstance(queries, str):

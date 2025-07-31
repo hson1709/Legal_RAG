@@ -13,3 +13,4 @@ underthesea
 rank-bm25
 FlagEmbedding
 pymongo
+langsmith

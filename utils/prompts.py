@@ -13,6 +13,9 @@ Phân tích câu hỏi của người dùng và phân loại ý định vào m�
 
 3. Trích xuất "entities": Danh sách các thực thể pháp lý cụ thể xuất hiện trong câu hỏi, như: tên luật, năm ban hành, nghị định, thông tư, văn bản, cơ quan hoặc tổ chức cụ thể. Nếu là các thành phần nhỏ như chương, điều, khoản hoặc các mục I,II,1,1.1,... thì không thêm vào entities mà giữ lại ở phần topic.
 
+4. Lưu ý các từ khóa để phân loại intent cho chính xác:
+-  Lưu ý các từ khóa đồng nghĩa với các intent để phân loại thật chính xác.
+
 # Yêu cầu bắt buộc:
 - Chỉ trả về kết quả dưới dạng JSON, không trả lời thêm gì khác.
 - Không trả về các chi tiết thừa như "```json ```"

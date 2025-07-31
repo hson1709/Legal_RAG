@@ -7,6 +7,7 @@ import math
 import pymongo
 from pymongo import MongoClient
 from config import MONGODB_CONFIG
+from langsmith import traceable
 
 
 metadata_label_map = {
@@ -37,12 +38,13 @@ class HybridRetriever(BaseRetriever):
         corpus_path_1024="./data/bm25_corpus_1024.pkl",
         chunk_size=1024,  
         chunk_overlap=100,
-        vector_num_chunks=10,
-        keyword_num_chunks=10,
-        hybrid_num_chunks=5,
-        num_final_docs = 5,
+        vector_num_chunks=10,  # Final number of parent docs from vector retriever
+        keyword_num_chunks=10,  # Final number of parent docs from keyword retriever
+        hybrid_num_chunks=5,  # Number of docs after merging vector and keyword results
+        num_final_docs = 5,  # Final number of docs after reranking
         vector_search_weight=0.6,
         auto_extract_filters=True,
+        vector_search_k=None,  # New parameter for vector search k
     ):
         if chunk_size not in [512, 1024]:
             raise ValueError("chunk_size must be either 512 or 1024")
@@ -67,7 +69,8 @@ class HybridRetriever(BaseRetriever):
             collection_name=collection_name,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            num_chunks=vector_num_chunks
+            num_chunks=vector_num_chunks,
+            vector_search_k=vector_search_k  # Pass the new parameter
         )
         
         self.keyword_retriever = KeywordRetriever(
@@ -159,6 +162,7 @@ class HybridRetriever(BaseRetriever):
         }
         return where_clause
 
+    @traceable
     def _weighted_merge_and_select_docs(
         self, 
         vector_docs_with_scores: List[tuple], 
@@ -215,6 +219,7 @@ class HybridRetriever(BaseRetriever):
         
         return final_docs[:self.hybrid_num_chunks]
 
+    @traceable
     def _format_context(self, parent_docs: List[Any]) -> str:
         """Format parent documents into context string"""
         def format_metadata_vietnamese(metadata):
@@ -236,125 +241,128 @@ class HybridRetriever(BaseRetriever):
 
 
     def retrieve(self, query: Union[str, List[str]], filters: Optional[Dict] = None) -> str:
-            """
-            Enhanced retrieve method with per-query filter extraction and search
+        """
+        Enhanced retrieve method with per-query filter extraction and search
+        
+        Args:
+            query: Search query (string or list of strings)
+            filters: Optional MongoDB filters to pre-filter documents
+                    If None and auto_extract_filters=True, will extract from each query
+        
+        Returns:
+            Formatted context string from retrieved documents
+        """
+        if isinstance(query, str):
+            queries = [query]
+        elif isinstance(query, list):
+            queries = query
+        else:
+            raise ValueError("Query must be a string or list of strings")
+        
+        all_vector_docs = []
+        all_keyword_docs = []
+        
+        # Process each query individually
+        for i, single_query in enumerate(queries):
+            print(f"Processing query {i+1}/{len(queries)}: {single_query}")
             
-            Args:
-                query: Search query (string or list of strings)
-                filters: Optional MongoDB filters to pre-filter documents
-                        If None and auto_extract_filters=True, will extract from each query
+            # Step 1: Extract filters for this specific query
+            query_filters = {}
+            if filters is None and self.auto_extract_filters and self.filter_extractor:
+                try:
+                    query_filters = self.filter_extractor.get_query_filter(single_query)
+                    if query_filters:
+                        print(f"Auto-extracted filters for query '{single_query}': {query_filters}")
+                except Exception as e:
+                    print(f"Error in automatic filter extraction for query '{single_query}': {e}")
+                    query_filters = {}
             
-            Returns:
-                Formatted context string from retrieved documents
-            """
-            if isinstance(query, str):
-                queries = [query]
-            elif isinstance(query, list):
-                queries = query
+            # Use provided filters or extracted filters for this query
+            final_filters = filters if filters is not None else query_filters
+            
+            # Step 2: MongoDB Pre-filtering for this query (if filters available)
+            chroma_where_clause = {}
+            filtered_vector_ids = []
+            if final_filters and self.mongo_collection is not None:
+                print(f"Step 2: MongoDB pre-filtering for query '{single_query}'...")
+                filtered_vector_ids = self._get_filtered_vector_ids(final_filters)
+                
+                if not filtered_vector_ids:
+                    print(f"No documents match the filters for query '{single_query}'")
+                    continue  # Skip this query if no documents match
+                
+                # Create ChromaDB where clause for filtered vector IDs
+                chroma_where_clause = self._create_chroma_where_clause(filtered_vector_ids)
+                print(f"Will search within {len(filtered_vector_ids)} pre-filtered chunks for query '{single_query}'")
+            
+            # Step 3: Vector search for this query on filtered subset (or all if no filters)
+            query_vector_docs = self.vector_retriever.get_unique_parent_docs_with_scores(
+                [single_query], 
+                where_clause=chroma_where_clause if chroma_where_clause else None,
+                filtered_vector_ids=filtered_vector_ids if filtered_vector_ids else None
+            )
+            
+            # Step 4: Keyword search for this query with filtering if available
+            use_512 = (self.chunk_size == 512)
+            query_keyword_docs = self.keyword_retriever.get_unique_parent_docs_with_scores(
+                [single_query], use_512=use_512
+            )
+            
+            # Filter keyword results if filters are available for this query
+            if final_filters:
+                query_keyword_docs = self._filter_keyword_results(query_keyword_docs, final_filters)
+            
+            # Add query-specific results to overall collections
+            all_vector_docs.extend(query_vector_docs)
+            all_keyword_docs.extend(query_keyword_docs)
+            
+            print(f"Query '{single_query}' returned {len(query_vector_docs)} vector docs and {len(query_keyword_docs)} keyword docs")
+        
+        # Step 5: Remove duplicates and merge documents using weighted approach
+        vector_docs_dict = {}
+        for doc, score in all_vector_docs:
+            parent_id = doc.metadata.get("parent_id")
+            if parent_id:
+                if parent_id not in vector_docs_dict or score > vector_docs_dict[parent_id][1]:
+                    vector_docs_dict[parent_id] = (doc, score)
             else:
-                raise ValueError("Query must be a string or list of strings")
-            
-            all_vector_docs = []
-            all_keyword_docs = []
-            
-            # Process each query individually
-            for i, single_query in enumerate(queries):
-                print(f"Processing query {i+1}/{len(queries)}: {single_query}")
-                
-                # Step 1: Extract filters for this specific query
-                query_filters = {}
-                if filters is None and self.auto_extract_filters and self.filter_extractor:
-                    try:
-                        query_filters = self.filter_extractor.get_query_filter(single_query)
-                        if query_filters:
-                            print(f"Auto-extracted filters for query '{single_query}': {query_filters}")
-                    except Exception as e:
-                        print(f"Error in automatic filter extraction for query '{single_query}': {e}")
-                        query_filters = {}
-                
-                # Use provided filters or extracted filters for this query
-                final_filters = filters if filters is not None else query_filters
-                
-                # Step 2: MongoDB Pre-filtering for this query (if filters available)
-                chroma_where_clause = {}
-                if final_filters and self.mongo_collection is not None:
-                    print(f"Step 2: MongoDB pre-filtering for query '{single_query}'...")
-                    filtered_vector_ids = self._get_filtered_vector_ids(final_filters)
-                    
-                    if not filtered_vector_ids:
-                        print(f"No documents match the filters for query '{single_query}'")
-                        continue  # Skip this query if no documents match
-                    
-                    # Create ChromaDB where clause for filtered vector IDs
-                    chroma_where_clause = self._create_chroma_where_clause(filtered_vector_ids)
-                    print(f"Will search within {len(filtered_vector_ids)} pre-filtered chunks for query '{single_query}'")
-                
-                # Step 3: Vector search for this query on filtered subset (or all if no filters)
-                query_vector_docs = self.vector_retriever.get_unique_parent_docs_with_scores(
-                    [single_query], where_clause=chroma_where_clause if chroma_where_clause else None
-                )
-                
-                # Step 4: Keyword search for this query with filtering if available
-                use_512 = (self.chunk_size == 512)
-                query_keyword_docs = self.keyword_retriever.get_unique_parent_docs_with_scores(
-                    [single_query], use_512=use_512
-                )
-                
-                # Filter keyword results if filters are available for this query
-                if final_filters:
-                    query_keyword_docs = self._filter_keyword_results(query_keyword_docs, final_filters)
-                
-                # Add query-specific results to overall collections
-                all_vector_docs.extend(query_vector_docs)
-                all_keyword_docs.extend(query_keyword_docs)
-                
-                print(f"Query '{single_query}' returned {len(query_vector_docs)} vector docs and {len(query_keyword_docs)} keyword docs")
-            
-            # Step 5: Remove duplicates and merge documents using weighted approach
-            vector_docs_dict = {}
-            for doc, score in all_vector_docs:
-                parent_id = doc.metadata.get("parent_id")
-                if parent_id:
-                    if parent_id not in vector_docs_dict or score > vector_docs_dict[parent_id][1]:
-                        vector_docs_dict[parent_id] = (doc, score)
-                else:
-                    # Fallback to document content hash if no parent_id
-                    doc_hash = hash(doc.page_content)
-                    if doc_hash not in vector_docs_dict or score > vector_docs_dict[doc_hash][1]:
-                        vector_docs_dict[doc_hash] = (doc, score)
-            
-            keyword_docs_dict = {}
-            for doc, score in all_keyword_docs:
-                parent_id = doc.metadata.get("parent_id")
-                if parent_id:
-                    if parent_id not in keyword_docs_dict or score > keyword_docs_dict[parent_id][1]:
-                        keyword_docs_dict[parent_id] = (doc, score)
-                else:
-                    # Fallback to document content hash if no parent_id
-                    doc_hash = hash(doc.page_content)
-                    if doc_hash not in keyword_docs_dict or score > keyword_docs_dict[doc_hash][1]:
-                        keyword_docs_dict[doc_hash] = (doc, score)
-            
-            # Convert back to lists
-            deduped_vector_docs = list(vector_docs_dict.values())
-            deduped_keyword_docs = list(keyword_docs_dict.values())
-            
-            print(f"After deduplication: {len(deduped_vector_docs)} vector docs, {len(deduped_keyword_docs)} keyword docs")
-            
-            # Step 6: Merge documents using weighted approach
-            merged_docs = self._weighted_merge_and_select_docs(deduped_vector_docs, deduped_keyword_docs)
-            
-            # Step 7: Rerank documents using all queries
-            reranked_docs_with_scores = self.reranker.rerank_documents(queries, merged_docs)
-            
-            # Step 8: Select final documents and format context
-            reranked_docs = [doc for doc, *_ in reranked_docs_with_scores]
-            final_docs = reranked_docs[:self.num_final_docs]
-            
-            if not final_docs:
-                return "Không tìm thấy tài liệu nào phù hợp với các truy vấn đã cung cấp."
-            
-            return self._format_context(final_docs)
+                # Fallback to document content hash if no parent_id
+                doc_hash = hash(doc.page_content)
+                if doc_hash not in vector_docs_dict or score > vector_docs_dict[doc_hash][1]:
+                    vector_docs_dict[doc_hash] = (doc, score)
+        
+        keyword_docs_dict = {}
+        for doc, score in all_keyword_docs:
+            parent_id = doc.metadata.get("parent_id")
+            if parent_id:
+                if parent_id not in keyword_docs_dict or score > keyword_docs_dict[parent_id][1]:
+                    keyword_docs_dict[parent_id] = (doc, score)
+            else:
+                # Fallback to document content hash if no parent_id
+                doc_hash = hash(doc.page_content)
+                if doc_hash not in keyword_docs_dict or score > keyword_docs_dict[doc_hash][1]:
+                    keyword_docs_dict[doc_hash] = (doc, score)
+        
+        # Convert back to lists
+        deduped_vector_docs = list(vector_docs_dict.values())
+        deduped_keyword_docs = list(keyword_docs_dict.values())
+        
+        print(f"After deduplication: {len(deduped_vector_docs)} vector docs, {len(deduped_keyword_docs)} keyword docs")
+        
+        # Step 6: Merge documents using weighted approach
+        merged_docs = self._weighted_merge_and_select_docs(deduped_vector_docs, deduped_keyword_docs)
+        
+        # Step 7: Rerank documents using all queries
+        reranked_docs_with_scores = self.reranker.rerank_documents(queries, merged_docs)
+        
+        # Step 8: Select final documents and format context
+        reranked_docs = [doc for doc, *_ in reranked_docs_with_scores]
+        final_docs = reranked_docs[:self.num_final_docs]
+        
+        if not final_docs:
+            return "Không tìm thấy tài liệu nào phù hợp với các truy vấn đã cung cấp."
+        
+        return self._format_context(final_docs)
 
 
     def _filter_keyword_results(self, keyword_docs_with_scores: List[tuple], filters: Dict) -> List[tuple]:
@@ -367,7 +375,7 @@ class HybridRetriever(BaseRetriever):
             keyword_docs_with_scores: List of (document, score) tuples from keyword search
             filters: MongoDB filters to apply (will be converted to metadata field names)
                     Can be simple dict or contain "$or" with list of filter conditions
-            
+        
         Returns:
             Filtered list of (document, score) tuples
         """
