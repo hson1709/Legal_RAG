@@ -172,12 +172,12 @@ class RAGPipeline:
     def _retrieve_documents(self, queries: Union[str, List[str]]) -> str:
         return self._retrieve_documents_with_filters(queries)
 
-    def _handle_lookup(self, question_json: Dict, question: str) -> str:
+    def _handle_lookup(self, question_json: Dict, question: str, filters: Optional[Dict] = None) -> str:
         queries = self.classifier.extract_query(question_json)
-        context = self._retrieve_documents_with_filters(queries)
+        context = self._retrieve_documents_with_filters(queries, filters)
         return self.generator.generate_basic_answer(context, question, self.llm)
 
-    def _handle_comparison(self, question_json: Dict) -> str:
+    def _handle_comparison(self, question_json: Dict, filters: Optional[Dict] = None) -> str:
         entities = question_json.get('entities', [])
         topic = question_json.get('topic', '')
 
@@ -185,14 +185,17 @@ class RAGPipeline:
             return self._handle_lookup(question_json, question_json.get('question', ''))
 
         queries = self.classifier.extract_query(question_json)
-        context = self._retrieve_documents_with_filters(queries)
+        context = self._retrieve_documents_with_filters(queries, filters)
         return self.generator.generate_comparison_answer(context, topic, entities, self.llm)
 
-    def _handle_analysis(self, question_json: Dict, topic_json: Dict) -> str:
-        topic = topic_json.get('topic', '')
+    def _handle_analysis(self, question_json: Dict, topic_json: Dict, filters: Optional[Dict] = None) -> str:
+        topic = question_json.get("topic", "")
+        entity = question_json.get("entities", [])
+        entity_str = " ".join(entity)  
+        final_topic = f"{topic} {entity_str}".strip()
         queries = self.classifier.extract_query(question_json, topic_json)
-        context = self._retrieve_documents_with_filters(queries)
-        return self.generator.generate_analysis_answer(context, topic, self.llm)
+        context = self._retrieve_documents_with_filters(queries, filters)
+        return self.generator.generate_analysis_answer(context, final_topic, self.llm)
 
     def _handle_other(self, question_json: Dict, question: str) -> str:
         return self._handle_lookup(question_json, question)
@@ -210,44 +213,26 @@ class RAGPipeline:
     def run(self, query: str, explicit_filters: Optional[Dict] = None) -> str:
         try:
             question_json = self.classifier.get_question_json(query)
-            topic_json = self.classifier.get_expansion_topic(query)
             intent = question_json.get('intent', 'KHAC')
 
             if explicit_filters:
                 original_use_filters = self.use_filters
                 self.use_filters = False
-                try:
-                    queries = self.classifier.extract_query(question_json)
-                    context = self._retrieve_documents_with_filters(queries, explicit_filters)
 
-                    match intent:
-                        case 'TRA_CUU':
-                            return self.generator.generate_basic_answer(context, query, self.llm)
-                        case 'SO_SANH':
-                            entities = question_json.get('entities', [])
-                            topic = question_json.get('topic', '')
-                            if len(entities) < 2:
-                                return self.generator.generate_basic_answer(context, query, self.llm)
-                            return self.generator.generate_comparison_answer(context, topic, entities, self.llm)
-                        case 'PHAN_TICH':
-                            topic = topic_json.get('topic', '')
-                            return self.generator.generate_analysis_answer(context, topic, self.llm)
-                        case _:
-                            return self.generator.generate_basic_answer(context, query, self.llm)
-                finally:
-                    self.use_filters = original_use_filters
-            else:
+            try:
                 match intent:
                     case 'TRA_CUU':
-                        return self._handle_lookup(question_json, query)
+                        return self._handle_lookup(question_json, query, explicit_filters)
                     case 'SO_SANH':
-                        return self._handle_comparison(question_json)
+                        return self._handle_comparison(question_json, explicit_filters)
                     case 'PHAN_TICH':
-                        return self._handle_analysis(question_json, topic_json)
-                    case 'KHAC':
-                        return self._handle_lookup(question_json, query)
-                    case _:
-                        return self._handle_lookup(question_json, query)
+                        topic_json = self.classifier.get_expansion_topic(query)
+                        return self._handle_analysis(question_json, topic_json, explicit_filters)
+                    case 'KHAC' | _:
+                        return self._handle_other(question_json, query, explicit_filters)
+            finally:
+                if explicit_filters:
+                    self.use_filters = original_use_filters
 
         except Exception as e:
             print(f"Error in RAG pipeline: {e}")

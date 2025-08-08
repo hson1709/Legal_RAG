@@ -2,6 +2,7 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from config import OPENAI_API_KEY, GOOGLE_API_KEY, EMBEDDING_MODEL, RERANKER_MODEL, GPT_MODEL, GEMINI_MODEL, DEVICE
 from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import SentenceTransformer
 from FlagEmbedding import FlagReranker
 
 
@@ -13,6 +14,12 @@ def load_embedding_model():
         encode_kwargs={"normalize_embeddings": True}
     )
     
+    return embedding_model
+
+def load_embedding_model_qdrant():
+    embedding_model = SentenceTransformer('bkai-foundation-models/vietnamese-bi-encoder')
+    embedding_model.to(DEVICE)
+
     return embedding_model
 
 def load_reranking_model():

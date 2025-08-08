@@ -5,7 +5,6 @@ import torch
 load_dotenv()
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-
 os.environ["HF_HOME"] = os.path.join(PROJECT_ROOT, "model")
 
 RAW_DATA_PATH = (PROJECT_ROOT, "data", "thuvienphapluat_documents.jsonl")
@@ -25,7 +24,7 @@ MONGODB_CONFIG = {
     "mongodb_collection_name_512": "legal_documents_512",
     "mongodb_collection_name_1024": "legal_documents_1024"
 }
+QDRANT_API = os.getenv("QDRANT_API")
+QDRANT_URL = os.getenv("QDRANT_URL")
 
-
-
-__all__ = ["OPENAI_API_KEY","GOOGLE_API_KEY", "RAW_DATA_PATH", "PERSIST_DIRECTORY", "EMBEDDING_MODEL", "RERANKER_MODEL", "GPT_MODEL", "GEMINI_MODEL", "DEVICE", "PARENT_DOCUMENTS", "MONGODB_CONFIG"]
+__all__ = ["OPENAI_API_KEY","GOOGLE_API_KEY", "RAW_DATA_PATH", "PERSIST_DIRECTORY", "EMBEDDING_MODEL", "RERANKER_MODEL", "GPT_MODEL", "GEMINI_MODEL", "DEVICE", "PARENT_DOCUMENTS", "MONGODB_CONFIG", "QDRANT_API", "QDRANT_URL"]

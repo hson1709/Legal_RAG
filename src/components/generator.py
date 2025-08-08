@@ -17,7 +17,7 @@ class Generator:
             ("system", system_prompt),
             ("human", """
             **Nhiệm vụ**:
-                Dưới đây là câu hỏi bạn cần trả lời:
+                Dưới đây là câu hỏi hoặc yêu cầu bạn cần trả lời:
                 {question}
 
             Tài liệu tham khảo:

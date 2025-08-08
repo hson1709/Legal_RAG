@@ -9,6 +9,7 @@ from src.components.reranker import CrossEncoderReRanker
 from src.pipline import RAGPipeline
 
 
+
 embedding_model = load_embedding_model()
 reranking_model = load_reranking_model()
 llm = load_llm()

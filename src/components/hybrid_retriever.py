@@ -147,7 +147,3 @@ class HybridRetriever(BaseRetriever):
         final_docs = reranked_docs[:self.num_final_docs]
 
         return self._format_context(final_docs)
-
-
-
-
